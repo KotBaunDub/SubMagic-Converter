@@ -9,6 +9,7 @@
   "routes": [
     {
       "src": "/api/convert",
+      "methods": ["POST"],
       "dest": "api/convert.py"
     }
   ]

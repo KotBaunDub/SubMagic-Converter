@@ -3,14 +3,18 @@
   "builds": [
     {
       "src": "api/convert.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": { 
+        "maxLambdaSize": "15mb",
+        "includeFiles": "api/**"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/convert",
-      "methods": ["POST"],
-      "dest": "api/convert.py"
+      "dest": "api/convert.py",
+      "methods": ["POST"]
     }
   ]
 }

@@ -4,7 +4,7 @@
     {
       "src": "api/convert.py",
       "use": "@vercel/python",
-      "config": { 
+      "config": {
         "maxLambdaSize": "15mb",
         "includeFiles": "api/**"
       }
@@ -12,9 +12,9 @@
   ],
   "routes": [
     {
-      "src": "/api/convert",
-      "dest": "api/convert.py",
-      "methods": ["POST"]
+      "src": "/api/(.*)",
+      "dest": "api/$1",
+      "methods": ["POST", "GET"]
     }
   ]
 }

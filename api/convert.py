@@ -4,8 +4,16 @@ from io import BytesIO
 from openpyxl import Workbook
 import json
 
+def parse_subtitle(content, filename):
+    """Определяем формат и парсим файл"""
+    if filename.lower().endswith('.ass'):
+        return parse_ass(content)
+    elif filename.lower().endswith('.srt'):
+        return parse_srt(content)
+    raise ValueError("Unsupported file format")
+
 def parse_ass(content):
-    """Парсинг ASS файла"""
+    """Парсинг ASS формата"""
     result = []
     in_events = False
     for line in content.splitlines():
@@ -21,7 +29,7 @@ def parse_ass(content):
     return result
 
 def parse_srt(content):
-    """Парсинг SRT файла"""
+    """Парсинг SRT формата"""
     result = []
     blocks = re.split(r'\n\s*\n', content.strip())
     for block in blocks:
@@ -37,35 +45,23 @@ def handler(request):
         if request.method != 'POST':
             return {
                 'statusCode': 405,
-                'body': json.dumps({'error': 'Method not allowed'})
+                'body': json.dumps({'error': 'Only POST method allowed'})
             }
 
-        # Получаем файл из запроса
-        file = request.files.get('file')
-        if not file:
+        if 'file' not in request.files:
             return {
                 'statusCode': 400,
                 'body': json.dumps({'error': 'No file uploaded'})
             }
 
+        file = request.files['file']
         content = file.read().decode('utf-8')
-        filename = file.filename.lower()
         
-        # Определяем формат файла
-        if filename.endswith('.ass'):
-            data = parse_ass(content)
-        elif filename.endswith('.srt'):
-            data = parse_srt(content)
-        else:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'Unsupported file type'})
-            }
-
-        # Создаем Excel файл
+        data = parse_subtitle(content, file.filename)
+        
         wb = Workbook()
         ws = wb.active
-        ws.append(["Время", "Текст"])
+        ws.append(["Time", "Text"])
         for row in data:
             ws.append(row)
         

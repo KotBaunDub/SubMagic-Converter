@@ -6,14 +6,14 @@
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb",
-        "includeFiles": "api/**"
+        "includeFiles": "api/*.py"
       }
     }
   ],
   "routes": [
     {
       "src": "/api/convert",
-      "dest": "api/convert.py",
+      "dest": "/api/convert.py",
       "methods": ["POST"]
     }
   ]

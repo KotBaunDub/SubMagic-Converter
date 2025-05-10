@@ -2,82 +2,89 @@ from http.server import BaseHTTPRequestHandler
 import re
 from io import BytesIO
 from openpyxl import Workbook
+import json
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            
-            # Простая обработка multipart/form-data
-            boundary = self.headers['Content-Type'].split('=')[1].encode()
-            parts = post_data.split(boundary)
-            file_data = None
-            
-            for part in parts:
-                if b'filename="' in part:
-                    file_data = part.split(b'\r\n\r\n')[1].rstrip(b'\r\n--')
-                    break
+def parse_ass(content):
+    """Парсинг ASS файла"""
+    result = []
+    in_events = False
+    for line in content.splitlines():
+        line = line.strip()
+        if line == "[Events]":
+            in_events = True
+            continue
+        if in_events and line.startswith("Dialogue:"):
+            parts = line.split(",", 9)
+            time = parts[1].strip()
+            text = re.sub(r'\{.*?\}', '', parts[9]).replace("\\N", " ")
+            result.append([time, text])
+    return result
 
-            if not file_data:
-                self.send_error(400, "No file uploaded")
-                return
+def parse_srt(content):
+    """Парсинг SRT файла"""
+    result = []
+    blocks = re.split(r'\n\s*\n', content.strip())
+    for block in blocks:
+        lines = [l.strip() for l in block.split('\n') if l.strip()]
+        if len(lines) >= 3:
+            timecode = lines[1]
+            text = ' '.join(lines[2:])
+            result.append([timecode, text])
+    return result
 
-            content = file_data.decode('utf-8')
-            
-            # Определяем формат файла
-            if 'Dialogue:' in content:  # ASS формат
-                data = self.parse_ass(content)
-            else:  # SRT формат
-                data = self.parse_srt(content)
-            
-            # Создаем Excel файл
-            excel_file = self.create_excel(data)
-            
-            # Отправляем ответ
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            self.send_header('Content-Disposition', 'attachment; filename="converted.xlsx"')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(excel_file.getvalue())
-            
-        except Exception as e:
-            self.send_error(500, f"Error: {str(e)}")
+def handler(request):
+    try:
+        if request.method != 'POST':
+            return {
+                'statusCode': 405,
+                'body': json.dumps({'error': 'Method not allowed'})
+            }
 
-    def parse_ass(self, content):
-        result = []
-        in_events = False
-        for line in content.splitlines():
-            line = line.strip()
-            if line == "[Events]":
-                in_events = True
-                continue
-            if in_events and line.startswith("Dialogue:"):
-                parts = line.split(",", 9)
-                time = parts[1].strip()
-                text = re.sub(r'\{.*?\}', '', parts[9]).replace("\\N", " ")
-                result.append([time, text])
-        return result
+        # Получаем файл из запроса
+        file = request.files.get('file')
+        if not file:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'No file uploaded'})
+            }
 
-    def parse_srt(self, content):
-        result = []
-        blocks = re.split(r'\n\s*\n', content.strip())
-        for block in blocks:
-            lines = [l.strip() for l in block.split('\n') if l.strip()]
-            if len(lines) >= 3:
-                timecode = lines[1]
-                text = ' '.join(lines[2:])
-                result.append([timecode, text])
-        return result
+        content = file.read().decode('utf-8')
+        filename = file.filename.lower()
+        
+        # Определяем формат файла
+        if filename.endswith('.ass'):
+            data = parse_ass(content)
+        elif filename.endswith('.srt'):
+            data = parse_srt(content)
+        else:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Unsupported file type'})
+            }
 
-    def create_excel(self, data):
+        # Создаем Excel файл
         wb = Workbook()
         ws = wb.active
         ws.append(["Время", "Текст"])
         for row in data:
             ws.append(row)
+        
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        return output
+
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'Content-Disposition': 'attachment; filename="converted.xlsx"'
+            },
+            'body': output.getvalue().decode('latin1'),
+            'isBase64Encoded': False
+        }
+
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
